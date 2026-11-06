@@ -21,6 +21,7 @@ const code = decodeURIComponent(href.slice('javascript:'.length));
     const json = body => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     if (u.pathname.endsWith('/GetMember/M123')) return json({ firstName: 'Test', lastName: 'Swimmer' });
     if (u.pathname.endsWith('/GetBestTimesForMember/M123')) return json([{ event: '50 FR SCY', time: '30.12' }]);
+    if (u.pathname.endsWith('/GetSwimmerTimeStandards/M123')) return json([{ standard: 'B' }]);
     if (u.pathname.endsWith('/GetSwimmerMeets/M123')) return json([{ meetId: 11, meetName: 'A' }, { meetId: 22, meetName: 'B' }]);
     if (u.pathname.endsWith('/GetSwimmerMeetTimes/M123/11')) return json([{ time: '30.12' }]);
     if (u.pathname.endsWith('/GetSwimmerMeetTimes/M123/22')) return route.fulfill({ status: 500, body: 'boom' });
@@ -43,7 +44,8 @@ const code = decodeURIComponent(href.slice('javascript:'.length));
   check(out.meetTimes['11'] && out.meetTimes['11'][0].time === '30.12', 'meet 11 times');
   check(out.meetTimes['22'] === null, 'meet 22 failure recorded as null');
   check(out.errors.length === 1 && /meet 2 of 2: 500/.test(out.errors[0]), 'error list: ' + JSON.stringify(out.errors));
-  check(api.length === 5, 'request count ' + api.length);
+  check(Array.isArray(out.timeStandards), 'timeStandards');
+  check(api.length === 6, 'request count ' + api.length);
   check(api.every(s => s.headers['device-id'] === 'DEV-1' && s.headers['x-csrf'] === '1'), 'headers use the page device id');
   check(/Done with 1 problem/.test(status), 'status: ' + status);
   if (fail.length) { console.error('FAIL\n' + fail.join('\n')); process.exit(1); }

@@ -3,7 +3,7 @@
 // browser, uses the page's own device id and makes the same read-only requests the
 // page makes, for this one swimmer only. Result: a JSON file you import into SwimTracker.
 (async () => {
-  const VERSION = 1;
+  const VERSION = 2;
   const BASE = '/api/times/swims';
   // Stay gentle: one swimmer, a handful of meets.
   const MAX_MEETS = 60;
@@ -47,6 +47,8 @@
   out.member = await tryGet('swimmer', '/TimesSearch/GetMember/' + encodeURIComponent(memberId));
   out.bestTimes = await tryGet('best times', '/TimesSearch/GetBestTimesForMember/' + encodeURIComponent(memberId));
   out.meets = await tryGet('meets', '/TimesSearch/GetSwimmerMeets/' + encodeURIComponent(memberId));
+  // Raw for now: the dashboard will use it for "time to next cut" once its shape is known.
+  out.timeStandards = await tryGet('time standards', '/SearchFilter/GetSwimmerTimeStandards/' + encodeURIComponent(memberId));
 
   // Meet list shape is not confirmed yet: find each item's meet id by key name.
   const list = Array.isArray(out.meets) ? out.meets

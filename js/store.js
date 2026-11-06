@@ -54,6 +54,7 @@
     const id = pull.memberId;
     const sw = store.swimmers[id] || (store.swimmers[id] = { memberId: id, member: {}, meets: {}, swims: {}, pulls: [] });
     if (pull.member) sw.member = Object.assign({}, sw.member, pull.member);
+    if (pull.timeStandards) sw.timeStandards = pull.timeStandards;   // raw, kept for the cuts view
 
     for (const m of Array.isArray(pull.meets) ? pull.meets : []) {
       if (m && m.meetId != null) sw.meets[m.meetId] = {
