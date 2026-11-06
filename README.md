@@ -9,9 +9,9 @@ SwimTopia) in one place: best times, how each event has changed over time, and e
    - **SwimTracker pull**: on the swimmer's page at `data.usaswimming.org/search/athlete/<memberId>`
      (signed in with a free USA Swimming account). It runs in your own browser, uses the page's own
      device id and makes the same read-only requests the page makes, for that one swimmer, with a
-     pause between requests. It saves `swimtracker-<memberId>-<date>.json`.
+     pause between requests. Then it adds them to SwimTracker (below).
    - **SwimTracker capture**: on any page that shows times in a table (SwimTopia athlete or meet
-     results). It saves the tables already on screen and makes no requests.
+     results). It reads the tables already on screen (no requests of its own) and adds them the same way.
 2. **After each meet**, tap the button. When it finishes it opens the dashboard as
    `<site>#add=<data>` (deflate + base64url) and the dashboard adds the swims, lists new best times
    and clears the link. The part after `#` is never sent to a server. If the pull had problems the
