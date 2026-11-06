@@ -11,7 +11,7 @@
 
   const m = location.pathname.match(/\/search\/athlete\/([^/?#]+)/);
   if (location.hostname !== 'data.usaswimming.org' || !m) {
-    alert('SwimTracker: open the swimmer\'s page on data.usaswimming.org first\n(Search → athlete → his name), then tap this bookmark again.');
+    alert('SwimTracker: sign in to data.usaswimming.org (free USA Swimming account), open the swimmer\'s page\n(Search → athlete → his name), then tap this bookmark again.');
     return;
   }
   const memberId = decodeURIComponent(m[1]);
