@@ -8,6 +8,8 @@ const BOOKMARKLETS = [
   { id: 'bm', file: 'bookmarklet/pull.js' },        // USA Swimming Data Hub
   { id: 'bm2', file: 'bookmarklet/capture.js' },    // any page with times tables (SwimTopia)
 ];
+// Where the buttons send data. Override for testing: SWIMTRACKER_URL=http://... node tools/build.js
+const APP_URL = process.env.SWIMTRACKER_URL || 'https://gwallee.github.io/SwimTracker/';
 const esc = s => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 function build(file) {
@@ -17,7 +19,7 @@ function build(file) {
     .map(l => l.trim())
     .filter(Boolean)
     .join('\n');
-  return 'javascript:' + encodeURIComponent(src);
+  return 'javascript:' + encodeURIComponent(src.split('__SWIMTRACKER_URL__').join(APP_URL));
 }
 
 const htmlPath = path.join(root, 'install.html');

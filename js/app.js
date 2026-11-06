@@ -311,6 +311,15 @@
     const pasted = document.getElementById('paste').value.trim();
     if (pasted) texts.push(pasted);
     if (!texts.length) { msg.textContent = 'Pick a file or paste a pull first.'; return; }
+    const lines = importTexts(texts);
+    save();
+    render();
+    msg.textContent = lines.join('\n\n');
+    document.getElementById('file').value = '';
+    document.getElementById('paste').value = '';
+  }
+  // Merges pulls, captures or Export files (JSON text) into the store; returns one message per text.
+  function importTexts(texts) {
     const lines = [];
     for (const t of texts) {
       try {
@@ -338,11 +347,27 @@
           (data.errors && data.errors.length ? '\nThe pull reported ' + data.errors.length + ' problem(s): ' + data.errors.join('; ') : ''));
       } catch (e) { lines.push('Could not import: ' + e.message); }
     }
-    save();
-    render();
-    msg.textContent = lines.join('\n\n');
-    document.getElementById('file').value = '';
-    document.getElementById('paste').value = '';
+    return lines;
+  }
+
+  // The pull / capture buttons open this page as <url>#add=<packed data>. The part after # never
+  // leaves the browser, so the data goes straight from the Data Hub tab into this browser's storage.
+  async function unpack(v) {
+    if (v.startsWith('j.')) return decodeURIComponent(v.slice(2));
+    if (!v.startsWith('z.')) throw new Error('unknown data format');
+    const bin = atob(v.slice(2).replace(/-/g, '+').replace(/_/g, '/'));
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+  }
+  async function receiveFromLink() {
+    const m = location.hash.match(/^#add=(.+)$/);
+    if (!m) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    let lines;
+    try { lines = importTexts([await unpack(m[1])]); save(); render(); }
+    catch (e) { lines = ['Could not add the data from the button: ' + e.message, 'Use Save file on the button\'s panel and Import instead.']; }
+    document.getElementById('importMsg').textContent = 'Added from the button.\n\n' + lines.join('\n\n');
+    document.getElementById('importDlg').showModal();
   }
   function doExport() {
     const blob = new Blob([JSON.stringify(state.store, null, 1)], { type: 'application/json' });
@@ -355,5 +380,5 @@
   document.getElementById('doImport').addEventListener('click', doImport);
   load();
   render();
-  loadPublished();
+  receiveFromLink().then(loadPublished);
 })();

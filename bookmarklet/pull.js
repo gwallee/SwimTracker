@@ -29,6 +29,18 @@
   document.body.appendChild(box);
   const status = t => { box.querySelector('#st-status').textContent = t; };
 
+  // Packs JSON for the #add= link: deflate + base64url when the browser can, plain otherwise.
+  const pack = async json => {
+    try {
+      const cs = new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+      const buf = new Uint8Array(await new Response(cs).arrayBuffer());
+      let bin = '';
+      for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+      return 'z.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch (e) { return 'j.' + encodeURIComponent(json); }
+  };
+  const APP = '__SWIMTRACKER_URL__';
+  const addToApp = async data => { location.href = APP + '#add=' + await pack(JSON.stringify(data)); };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const get = async path => {
     const res = await fetch(BASE + path, { headers: { 'Device-Id': deviceId, 'X-CSRF': '1' }, credentials: 'include' });
@@ -68,10 +80,15 @@
   if (list.length && !ids.length) errors.push('meets: could not find a meet id field in ' + JSON.stringify(Object.keys(list[0] || {})));
   out.errors = errors;
 
+  if (!errors.length) {
+    status('Done: ' + ids.length + ' meet(s). Adding to SwimTracker…');
+    await addToApp(out);
+    return;
+  }
   const json = JSON.stringify(out, null, 1);
   const name = 'swimtracker-' + memberId.replace(/[^A-Za-z0-9_-]/g, '') + '-' + out.pulledAt.slice(0, 10) + '.json';
   status((errors.length ? 'Done with ' + errors.length + ' problem(s). ' : 'Done. ') +
-    ids.length + ' meet(s), ' + (json.length / 1024).toFixed(0) + ' KB. Save the file, then import it into SwimTracker.');
+    ids.length + ' meet(s), ' + (json.length / 1024).toFixed(0) + ' KB. Add it to SwimTracker anyway, or save the file.');
 
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
@@ -81,6 +98,7 @@
     b.style.cssText = 'padding:8px 12px;border-radius:6px;border:1px solid #0b5ea8;background:#0b5ea8;color:#fff;font:inherit';
     b.onclick = fn; row.appendChild(b); return b;
   };
+  btn('Add to SwimTracker', () => addToApp(out));
   btn('Save file', () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));

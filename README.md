@@ -12,8 +12,12 @@ SwimTopia) in one place: best times, how each event has changed over time, and e
      pause between requests. It saves `swimtracker-<memberId>-<date>.json`.
    - **SwimTracker capture**: on any page that shows times in a table (SwimTopia athlete or meet
      results). It saves the tables already on screen and makes no requests.
-2. **After each meet**, tap the button, save the file, then open `index.html` → **Import**.
-   Importing again is safe: swims already stored are skipped, and new best times are listed.
+2. **After each meet**, tap the button. When it finishes it opens the dashboard as
+   `<site>#add=<data>` (deflate + base64url) and the dashboard adds the swims, lists new best times
+   and clears the link. The part after `#` is never sent to a server. If the pull had problems the
+   button shows a panel with **Add to SwimTracker** / **Save file** (then **Import**).
+   Importing again is safe: swims already stored are skipped. The site URL is built into the
+   buttons (`tools/build.js`, `SWIMTRACKER_URL` to override).
 3. **Dashboard** (`index.html`):
    - Tiles: meets, swims, best times at the last meet, biggest drop.
    - *Times over time*: **By event** (one event, faster = higher) or **By stroke** (pace per 25 so the
@@ -35,6 +39,6 @@ Zero dependencies: plain HTML/CSS/JS (`index.html`, `css/app.css`, `js/store.js`
 
 - `node tools/build.js` builds the bookmarklets (`bookmarklet/*.js`) into `install.html`.
 - `node tools/test-store.js` checks merge, best times, drops and capture parsing (synthetic data).
-- `node tools/test-bookmarklet.js` runs the pull button on a mocked Data Hub page (Playwright; no real requests).
+- `node tools/test-bookmarklet.js` runs both buttons on mocked pages and follows them into the dashboard (Playwright; no real requests).
 - The capture importer recognizes tables by their header row (Event + Time required; Date, Meet,
   Place, Name optional). Its SwimTopia handling is a stand-in until a real capture is checked.
