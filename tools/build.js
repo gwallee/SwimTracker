@@ -1,23 +1,33 @@
-// Builds the bookmarklet from bookmarklet/pull.js and writes it into index.html.
+// Builds the bookmarklets in bookmarklet/ and writes them into install.html.
 // Usage: node tools/build.js
 const fs = require('fs');
 const path = require('path');
 const root = path.join(__dirname, '..');
 
-const src = fs.readFileSync(path.join(root, 'bookmarklet/pull.js'), 'utf8')
-  .split('\n')
-  .filter(l => !/^\s*\/\//.test(l))           // full-line comments only
-  .map(l => l.trim())
-  .filter(Boolean)
-  .join('\n');
-const href = 'javascript:' + encodeURIComponent(src);
-
-const htmlPath = path.join(root, 'index.html');
-const html = fs.readFileSync(htmlPath, 'utf8');
+const BOOKMARKLETS = [
+  { id: 'bm', file: 'bookmarklet/pull.js' },        // USA Swimming Data Hub
+  { id: 'bm2', file: 'bookmarklet/capture.js' },    // any page with times tables (SwimTopia)
+];
 const esc = s => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-const next = html
-  .replace(/(<a id="bm" href=")[^"]*(")/, '$1' + esc(href) + '$2')
-  .replace(/(<textarea id="bmcode"[^>]*>)[\s\S]*?(<\/textarea>)/, '$1' + esc(href) + '$2');
-if (next === html && !html.includes(esc(href))) throw new Error('placeholders not found in index.html');
-fs.writeFileSync(htmlPath, next);
-console.log('bookmarklet', href.length, 'chars → index.html');
+
+function build(file) {
+  const src = fs.readFileSync(path.join(root, file), 'utf8')
+    .split('\n')
+    .filter(l => !/^\s*\/\//.test(l))           // full-line comments only
+    .map(l => l.trim())
+    .filter(Boolean)
+    .join('\n');
+  return 'javascript:' + encodeURIComponent(src);
+}
+
+const htmlPath = path.join(root, 'install.html');
+let html = fs.readFileSync(htmlPath, 'utf8');
+for (const b of BOOKMARKLETS) {
+  const href = esc(build(b.file));
+  const a = new RegExp('(<a id="' + b.id + '" href=")[^"]*(")');
+  const ta = new RegExp('(<textarea id="' + b.id + 'code"[^>]*>)[\\s\\S]*?(</textarea>)');
+  if (!a.test(html) || !ta.test(html)) throw new Error('placeholders for ' + b.id + ' not found in install.html');
+  html = html.replace(a, (m, p1, p2) => p1 + href + p2).replace(ta, (m, p1, p2) => p1 + href + p2);
+  console.log(b.id, b.file, href.length, 'chars');
+}
+fs.writeFileSync(htmlPath, html);

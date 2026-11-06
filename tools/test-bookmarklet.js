@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', 'install.html'), 'utf8');
 const href = html.match(/<a id="bm" href="([^"]*)"/)[1]
   .replace(/&lt;/g, '<').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 const code = decodeURIComponent(href.slice('javascript:'.length));

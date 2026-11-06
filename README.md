@@ -1,14 +1,29 @@
 # SwimTracker
 
-Track a swimmer's times from the USA Swimming Data Hub in one place.
+Track a swimmer's times from the USA Swimming Data Hub (and summer-league pages such as
+SwimTopia) in one place: best times, how each event has changed over time, and every meet.
 
-## How it works (so far)
+## Use
 
-1. **Pull, after each meet.** A bookmarklet (`bookmarklet/pull.js`) runs on the swimmer's page at
-   `data.usaswimming.org/search/athlete/<memberId>` in your own browser. It uses the page's own
-   device id and makes the same read-only requests the page makes, for that one swimmer only,
-   with a pause between requests. It saves a `swimtracker-<memberId>-<date>.json` file.
-2. **Import** (next): the dashboard reads those files: PRs, progression, time standards.
+1. **Install the buttons once** from `install.html`:
+   - **SwimTracker pull**: on the swimmer's page at `data.usaswimming.org/search/athlete/<memberId>`
+     (signed in with a free USA Swimming account). It runs in your own browser, uses the page's own
+     device id and makes the same read-only requests the page makes, for that one swimmer, with a
+     pause between requests. It saves `swimtracker-<memberId>-<date>.json`.
+   - **SwimTracker capture**: on any page that shows times in a table (SwimTopia athlete or meet
+     results). It saves the tables already on screen and makes no requests.
+2. **After each meet**, tap the button, save the file, then open `index.html` → **Import**.
+   Importing again is safe: swims already stored are skipped, and new best times are listed.
+3. **Dashboard** (`index.html`):
+   - Tiles: meets, swims, best times at the last meet, biggest drop.
+   - *Times over time*: **By event** (one event, faster = higher) or **By stroke** (pace per 25 so the
+     25, 50 and 100 of a stroke share one chart, one marker shape per distance).
+   - Best-times table (tap a row to chart it) and every meet with PB / NEW markers.
+
+Data lives in the browser (localStorage). **Export** saves it all as one file; importing that file
+on another device restores it. If `data/store.json` exists next to the page (an Export file), the
+page loads it when the browser has nothing saved, which is how a shared copy could be published.
+This repository is public, so don't commit swimmer data unless you mean to publish it.
 
 Data Hub endpoints used (`/api/times/swims`, undocumented; read from the site's own scripts):
 `TimesSearch/GetMember/{id}`, `TimesSearch/GetBestTimesForMember/{id}`,
@@ -16,5 +31,10 @@ Data Hub endpoints used (`/api/times/swims`, undocumented; read from the site's 
 
 ## Develop
 
-- `node tools/build.js` builds the bookmarklet into `index.html` (install page).
-- `node tools/test-bookmarklet.js` runs it on a mocked Data Hub page (Playwright; no real requests).
+Zero dependencies: plain HTML/CSS/JS (`index.html`, `css/app.css`, `js/store.js`, `js/app.js`).
+
+- `node tools/build.js` builds the bookmarklets (`bookmarklet/*.js`) into `install.html`.
+- `node tools/test-store.js` checks merge, best times, drops and capture parsing (synthetic data).
+- `node tools/test-bookmarklet.js` runs the pull button on a mocked Data Hub page (Playwright; no real requests).
+- The capture importer recognizes tables by their header row (Event + Time required; Date, Meet,
+  Place, Name optional). Its SwimTopia handling is a stand-in until a real capture is checked.
