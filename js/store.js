@@ -193,7 +193,32 @@
     return { memberId, added, found: r.swims.length, notes: r.notes };
   }
 
-  const api = { toSecs, fmtSecs, parseEvent, eventName, compareEvents, empty, checkPull, merge, analyze, STROKES,
+  // Union of two whole stores (this browser + the synced copy). Swims, meets and pulls are keyed,
+  // so merging in either order gives the same result and nothing is ever dropped.
+  function mergeStores(into, from) {
+    if (!from || !from.swimmers) return { changed: false };
+    let changed = false;
+    for (const [id, sw] of Object.entries(from.swimmers)) {
+      let cur = into.swimmers[id];
+      if (!cur) { into.swimmers[id] = JSON.parse(JSON.stringify(sw)); changed = true; continue; }
+      for (const k of ['meets', 'swims']) {
+        cur[k] = cur[k] || {};
+        for (const [key, v] of Object.entries(sw[k] || {})) if (!cur[k][key]) { cur[k][key] = v; changed = true; }
+      }
+      cur.pulls = cur.pulls || [];
+      const seen = new Set(cur.pulls.map(p => p.pulledAt + '|' + (p.source || '')));
+      for (const p of sw.pulls || []) if (!seen.has(p.pulledAt + '|' + (p.source || ''))) { cur.pulls.push(p); changed = true; }
+      cur.pulls.sort((a, b) => (a.pulledAt < b.pulledAt ? -1 : 1));
+      const lastPull = s => (s.pulls && s.pulls.length ? s.pulls[s.pulls.length - 1].pulledAt : '');
+      if (lastPull(sw) >= lastPull(cur)) {   // newer pull wins for profile fields
+        if (sw.member) cur.member = Object.assign({}, cur.member, sw.member);
+        if (sw.timeStandards) cur.timeStandards = sw.timeStandards;
+      }
+    }
+    return { changed };
+  }
+
+  const api = { mergeStores, toSecs, fmtSecs, parseEvent, eventName, compareEvents, empty, checkPull, merge, analyze, STROKES,
     eventFromText, dateFromText, parseCapture, mergeCapture };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.SwimStore = api;

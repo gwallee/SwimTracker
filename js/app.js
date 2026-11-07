@@ -314,6 +314,7 @@
     const lines = importTexts(texts);
     save();
     render();
+    syncNow('import');
     msg.textContent = lines.join('\n\n');
     document.getElementById('file').value = '';
     document.getElementById('paste').value = '';
@@ -325,11 +326,7 @@
       try {
         const data = JSON.parse(t);
         if (data && data.swimmers) {           // an Export file: merge its swimmers
-          for (const [id, sw] of Object.entries(data.swimmers)) {
-            const cur = state.store.swimmers[id];
-            if (!cur) state.store.swimmers[id] = sw;
-            else { Object.assign(cur.meets, sw.meets); Object.assign(cur.swims, sw.swims); cur.pulls = cur.pulls.concat(sw.pulls || []); }
-          }
+          S.mergeStores(state.store, data);
           lines.push('Restored ' + Object.keys(data.swimmers).length + ' swimmer(s) from an export.');
           continue;
         }
@@ -364,7 +361,7 @@
     if (!m) return;
     history.replaceState(null, '', location.pathname + location.search);
     let lines;
-    try { lines = importTexts([await unpack(m[1])]); save(); render(); }
+    try { lines = importTexts([await unpack(m[1])]); save(); render(); syncNow('add from button'); }
     catch (e) { lines = ['Could not add the data from the button: ' + e.message, 'Use Save file on the button\'s panel and Import instead.']; }
     document.getElementById('importMsg').textContent = 'Added from the button.\n\n' + lines.join('\n\n');
     document.getElementById('importDlg').showModal();
@@ -378,7 +375,76 @@
   document.getElementById('importBtn').addEventListener('click', openImport);
   document.getElementById('exportBtn').addEventListener('click', doExport);
   document.getElementById('doImport').addEventListener('click', doImport);
+  // ---------- sync (js/sync.js) ----------
+  const Y = window.SwimSync;
+  let syncSha = null, syncBusy = null;
+  function syncStatus(text, err) {
+    const el = document.getElementById('syncStatus');
+    el.textContent = text; el.classList.toggle('err', !!err);
+  }
+  // Load the synced copy, merge it in, and (with a read/write token) save back anything new.
+  async function syncNow(reason) {
+    const c = Y.getConfig();
+    if (!Y.enabled(c)) { syncStatus(''); return; }
+    if (syncBusy) { await syncBusy; return syncNow(reason); }
+    syncBusy = (async () => {
+      syncStatus('Syncing…');
+      try {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const remote = await Y.pull(c);
+          syncSha = remote.sha;
+          if (remote.store && S.mergeStores(state.store, remote.store).changed) { save(); render(); }
+          if (!c.canWrite || !Object.keys(state.store.swimmers).length) break;
+          const probe = remote.store ? JSON.parse(JSON.stringify(remote.store)) : S.empty();
+          if (remote.store && !S.mergeStores(probe, state.store).changed) break;     // nothing new here
+          try { syncSha = await Y.push(c, state.store, syncSha, 'SwimTracker: ' + reason); break; }
+          catch (e) { if ((e.status !== 409 && e.status !== 422) || attempt) throw e; }  // changed meanwhile: merge again
+        }
+        syncStatus((c.canWrite ? 'Synced ' : 'View only · updated ') + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+      } catch (e) { syncStatus('Sync problem: ' + e.message, true); }
+    })();
+    try { await syncBusy; } finally { syncBusy = null; }
+  }
+  function openSync() {
+    const c = Y.getConfig();
+    document.getElementById('syOwner').value = c.owner;
+    document.getElementById('syRepo').value = c.repo;
+    document.getElementById('syToken').value = '';
+    document.getElementById('syToken').placeholder = c.token ? 'saved (leave blank to keep)' : 'github_pat_…';
+    document.getElementById('syncMsg').textContent = Y.enabled(c) ? (c.canWrite ? 'Connected: this device can add times.' : 'Connected: view only.') : 'Not connected.';
+    document.getElementById('syncDlg').showModal();
+  }
+  async function saveSync() {
+    const old = Y.getConfig();
+    const c = Object.assign({}, old, {
+      owner: document.getElementById('syOwner').value.trim(),
+      repo: document.getElementById('syRepo').value.trim(),
+      token: document.getElementById('syToken').value.trim() || old.token,
+    });
+    const msg = document.getElementById('syncMsg');
+    if (!c.owner || !c.repo || !c.token) { msg.textContent = 'Fill in owner, repository and token.'; return; }
+    msg.textContent = 'Checking the token…';
+    try {
+      const t = await Y.test(c);
+      c.canWrite = t.canWrite;
+      Y.setConfig(c);
+      msg.textContent = 'Connected to ' + t.fullName + (t.canWrite ? ': this device can add times.' : ': view only.') +
+        (t.private ? '' : '\nWarning: this repository is PUBLIC, so the times in it are visible to anyone. Make it private on GitHub.');
+      await syncNow('first sync from this device');
+      msg.textContent += '\n' + document.getElementById('syncStatus').textContent;
+    } catch (e) { msg.textContent = e.message; }
+  }
+  function syncOff() {
+    Y.setConfig({});
+    syncStatus('');
+    document.getElementById('syncMsg').textContent = 'Sync is off on this device; the token was removed from this browser. Times already here stay.';
+  }
+  document.getElementById('syncBtn').addEventListener('click', openSync);
+  document.getElementById('sySave').addEventListener('click', saveSync);
+  document.getElementById('syOff').addEventListener('click', syncOff);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow('refresh'); });
+
   load();
   render();
-  receiveFromLink().then(loadPublished);
+  receiveFromLink().then(() => syncNow('open')).then(loadPublished);
 })();

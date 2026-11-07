@@ -11,10 +11,12 @@
   <div class="brand">
     <h1 id="name">SwimTracker</h1>
     <div id="meta" class="muted"></div>
+    <div id="syncStatus" class="muted small" role="status"></div>
   </div>
   <div class="actions">
     <button id="importBtn" class="primary">Import</button>
     <button id="exportBtn">Export</button>
+    <button id="syncBtn">Sync</button>
     <a class="btn" href="install.html">Pull button</a>
   </div>
 </header>
@@ -34,8 +36,25 @@
   </form>
 </dialog>
 
+<dialog id="syncDlg">
+  <form method="dialog" class="dlg" autocomplete="off">
+    <h2>Sync with GitHub</h2>
+    <p class="muted">Keeps the times in one file in a private GitHub repository, so every device and family member with a token sees the same data. The token is saved only in this browser.</p>
+    <label>Owner <input id="syOwner" required></label>
+    <label>Repository <input id="syRepo" required></label>
+    <label>Token <input id="syToken" type="password" placeholder="github_pat_…"></label>
+    <div id="syncMsg" class="msg" role="status"></div>
+    <div class="row">
+      <button id="syOff" type="button">Turn off sync</button>
+      <button value="cancel" formnovalidate>Close</button>
+      <button id="sySave" class="primary" type="button">Save and connect</button>
+    </div>
+  </form>
+</dialog>
+
 <div id="tip" class="tip" role="tooltip" hidden></div>
 <script src="js/store.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -102,3 +102,8 @@ details.meet h3 { display: inline; }
   td, th { padding: 6px 4px; }
   .chip { padding: 4px 9px; }
 }
+
+.dlg label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--text-2); }
+.dlg input:not([type=file]) { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+#syncStatus.err { color: #c23b3b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #syncStatus.err { color: #f08080; } }
