@@ -24,14 +24,15 @@
     const text = await res.text();
     let data = null; try { data = text ? JSON.parse(text) : null; } catch {}
     if (!res.ok) {
-      const e = new Error(explain(res.status, data && data.message));
+      const e = new Error(explain(res.status, data && data.message, method));
       e.status = res.status; throw e;
     }
     return data;
   }
-  function explain(status, msg) {
+  function explain(status, msg, method) {
     if (status === 401) return 'The token was not accepted (expired or mistyped).';
-    if (status === 403) return 'The token does not have access to this repository' + (msg ? ' (' + msg + ')' : '') + '.';
+    if (status === 403 && method === 'PUT') return 'This token can view but not save. On GitHub, give it Contents: Read and write, then tap Sync → Save and connect again.';
+    if (status === 403) return 'The token cannot read this repository. On GitHub, give it access to this repository with Contents: Read-only (to view) or Read and write (to add times).';
     if (status === 404) return 'Repository or file not found, or the token cannot see it.';
     if (status === 409 || status === 422) return 'The synced copy changed at the same time; try again.';
     return 'GitHub returned ' + status + (msg ? ': ' + msg : '');
@@ -51,10 +52,12 @@
     return new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0)));
   }
 
-  // Checks the token: can it see the repo, and can it write?
+  // Checks the token can see the repo and read its contents. Whether it can write is learned from
+  // the first save: for fine-grained tokens the repo's "permissions" describe the account, not the token.
   async function test(c) {
     const r = await gh(c, 'GET', repoPath(c));
-    return { canWrite: !!(r.permissions && (r.permissions.push || r.permissions.admin)), private: !!r.private, fullName: r.full_name };
+    await pull(c);
+    return { private: !!r.private, fullName: r.full_name };
   }
 
   // Returns { store, sha } of the synced file; store is null when the file does not exist yet.

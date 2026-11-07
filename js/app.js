@@ -394,14 +394,22 @@
           const remote = await Y.pull(c);
           syncSha = remote.sha;
           if (remote.store && S.mergeStores(state.store, remote.store).changed) { save(); render(); }
-          if (!c.canWrite || !Object.keys(state.store.swimmers).length) break;
+          if (c.canWrite === false || !Object.keys(state.store.swimmers).length) break;
           const probe = remote.store ? JSON.parse(JSON.stringify(remote.store)) : S.empty();
           if (remote.store && !S.mergeStores(probe, state.store).changed) break;     // nothing new here
-          try { syncSha = await Y.push(c, state.store, syncSha, 'SwimTracker: ' + reason); break; }
-          catch (e) { if ((e.status !== 409 && e.status !== 422) || attempt) throw e; }  // changed meanwhile: merge again
+          try {
+            syncSha = await Y.push(c, state.store, syncSha, 'SwimTracker: ' + reason);
+            if (c.canWrite !== true) { c.canWrite = true; Y.setConfig(c); }
+            break;
+          } catch (e) {
+            if (e.status === 403) { c.canWrite = false; Y.setConfig(c); throw e; }   // read-only token
+            if ((e.status !== 409 && e.status !== 422) || attempt) throw e;        // changed meanwhile: merge again
+          }
         }
-        syncStatus((c.canWrite ? 'Synced ' : 'View only · updated ') + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
-      } catch (e) { syncStatus('Sync problem: ' + e.message, true); }
+        syncStatus((c.canWrite === false ? 'View only · updated ' : 'Synced ') + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+      } catch (e) {
+        syncStatus(e.status === 403 && c.canWrite === false ? 'View only: ' + e.message : 'Sync problem: ' + e.message, true);
+      }
     })();
     try { await syncBusy; } finally { syncBusy = null; }
   }
@@ -411,7 +419,7 @@
     document.getElementById('syRepo').value = c.repo;
     document.getElementById('syToken').value = '';
     document.getElementById('syToken').placeholder = c.token ? 'saved (leave blank to keep)' : 'github_pat_…';
-    document.getElementById('syncMsg').textContent = Y.enabled(c) ? (c.canWrite ? 'Connected: this device can add times.' : 'Connected: view only.') : 'Not connected.';
+    document.getElementById('syncMsg').textContent = Y.enabled(c) ? (c.canWrite === true ? 'Connected: this device can add times.' : c.canWrite === false ? 'Connected: view only (this token cannot save).' : 'Connected.') : 'Not connected.';
     document.getElementById('syncDlg').showModal();
   }
   async function saveSync() {
@@ -426,9 +434,9 @@
     msg.textContent = 'Checking the token…';
     try {
       const t = await Y.test(c);
-      c.canWrite = t.canWrite;
+      delete c.canWrite;            // learned again from the next save
       Y.setConfig(c);
-      msg.textContent = 'Connected to ' + t.fullName + (t.canWrite ? ': this device can add times.' : ': view only.') +
+      msg.textContent = 'Connected to ' + t.fullName + '.' +
         (t.private ? '' : '\nWarning: this repository is PUBLIC, so the times in it are visible to anyone. Make it private on GitHub.');
       await syncNow('first sync from this device');
       msg.textContent += '\n' + document.getElementById('syncStatus').textContent;

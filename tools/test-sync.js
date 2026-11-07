@@ -32,13 +32,15 @@ async function route(r) {
   const token = (req.headers().authorization || '').replace('Bearer ', '');
   const json = (status, body) => r.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body),
     headers: { 'access-control-allow-origin': '*' } });
-  if (!['rw', 'ro'].includes(token)) return json(401, { message: 'Bad credentials' });
+  if (!['rw', 'ro', 'nocontents'].includes(token)) return json(401, { message: 'Bad credentials' });
   if (u.pathname === '/repos/gwallee/SwimTracker-data')
-    return json(200, { full_name: 'gwallee/SwimTracker-data', private: true, permissions: { push: token === 'rw', pull: true } });
+    // Like GitHub with fine-grained tokens: "permissions" is the account's role, whatever the token allows.
+    return json(200, { full_name: 'gwallee/SwimTracker-data', private: true, permissions: { admin: true, push: true, pull: true } });
   if (u.pathname === '/repos/gwallee/SwimTracker-data/contents/store.json') {
+    if (req.method() === 'GET' && token === 'nocontents') return json(403, { message: 'Resource not accessible by personal access token' });
     if (req.method() === 'GET') return repo.file ? json(200, { content: Buffer.from(repo.file).toString('base64'), sha: 's' + repo.sha }) : json(404, { message: 'Not Found' });
     if (req.method() === 'PUT') {
-      if (token !== 'rw') return json(403, { message: 'Resource not accessible by personal access token' });
+      if (token !== 'rw') return json(403, { message: 'Resource not accessible by personal access token' });   // ro or nocontents
       const b = JSON.parse(req.postData());
       if (repo.empty && b.branch) return json(404, { message: 'Branch main not found' });
       if (repo.failNextPut) { repo.failNextPut--; repo.sha++; return json(409, { message: 'conflict' }); }
@@ -79,15 +81,18 @@ const remoteSwims = () => repo.file ? Object.keys(JSON.parse(repo.file).swimmers
 
   const dadStore = S.empty(); S.merge(dadStore, pullFor([{ date: '2025-09-01', time: '40.00' }, { date: '2025-10-01', time: '39.00' }]));
   const dad = await device(browser, dadStore);
+  const m0 = await connect(dad, 'nocontents');
+  check(/cannot read this repository/.test(m0), 'token without Contents explained: ' + m0);
   const m1 = await connect(dad, 'rw');
-  check(/can add times/.test(m1), 'dad connects read/write: ' + m1);
+  check(/Synced/.test(m1), 'dad connects read/write: ' + m1);
+  check(await dad.evaluate(() => JSON.parse(localStorage.getItem('swimtracker.sync')).canWrite === true), 'write access learned from the save');
   check(remoteSwims() === 2, 'first sync creates the file in the empty repo with 2 swims (got ' + remoteSwims() + ')');
 
   const grandma = await device(browser, null);
   const bad = await connect(grandma, 'nope');
   check(/not accepted/.test(bad), 'bad token explained: ' + bad);
   const m2 = await connect(grandma, 'ro');
-  check(/view only/.test(m2), 'grandma connects view-only: ' + m2);
+  check(/Connected to gwallee\/SwimTracker-data/.test(m2) && !/problem/.test(m2), 'grandma connects: ' + m2);
   check(await swimsTile(grandma) === '2', 'grandma sees 2 swims');
 
   // Dad adds a meet; a conflicting save is retried after merging.
@@ -100,12 +105,22 @@ const remoteSwims = () => repo.file ? Object.keys(JSON.parse(repo.file).swimmers
   await dad.click('#importDlg button[value=cancel]');
 
   await grandma.reload();
-  await grandma.waitForFunction(() => /View only/.test(document.getElementById('syncStatus').textContent), null, { timeout: 10000 });
+  await grandma.waitForFunction(() => /Synced|View only/.test(document.getElementById('syncStatus').textContent), null, { timeout: 10000 });
   check(await swimsTile(grandma) === '3', 'grandma sees the new meet after reopening');
   const putsBefore = repo.puts;
   await grandma.reload();
-  await grandma.waitForFunction(() => /View only/.test(document.getElementById('syncStatus').textContent), null, { timeout: 10000 });
+  await grandma.waitForFunction(() => /Synced|View only/.test(document.getElementById('syncStatus').textContent), null, { timeout: 10000 });
   check(repo.puts === putsBefore, 'view-only device never writes');
+
+  // A device with its own times and a view-only token: the refused save marks it view only.
+  const auntStore = S.empty(); S.merge(auntStore, pullFor([{ date: '2025-12-01', time: '37.90' }]));
+  auntStore.swimmers.X1.swims['900'] = Object.assign({}, auntStore.swimmers.X1.swims['100'], { id: '900', date: '2025-12-02' });
+  const aunt = await device(browser, auntStore);
+  const m3 = await connect(aunt, 'ro');
+  check(/can view but not save/.test(m3), 'read-only token with local data explained: ' + m3);
+  check(await aunt.evaluate(() => JSON.parse(localStorage.getItem('swimtracker.sync')).canWrite === false), 'refused save marks view only');
+  await aunt.reload();
+  await aunt.waitForFunction(() => /View only · updated/.test(document.getElementById('syncStatus').textContent), null, { timeout: 10000 });
 
   await dad.click('#syncBtn'); await dad.click('#syOff'); await dad.click('#syncDlg button[value=cancel]');
   check(await dad.evaluate(() => !JSON.parse(localStorage.getItem('swimtracker.sync') || '{}').token), 'turn off removes the token');
