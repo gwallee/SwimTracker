@@ -24,6 +24,15 @@ SwimTopia) in one place: best times, how each event has changed over time, and e
      25, 50 and 100 of a stroke share one chart, one marker shape per distance).
    - Best-times table (tap a row to chart it) and every meet with PB / NEW markers.
 
+Each complete pull is a **snapshot**: Daniel's USA Swimming swims are replaced with exactly what the
+Data Hub shows (corrected or removed times included); captured summer-league swims are kept. A pull
+with errors only adds; a pull older than the stored one is ignored. Synced devices follow the newest
+snapshot.
+
+The access token is kept in the dashboard (Sync), not in the bookmarklets: they run inside the
+USA Swimming page, whose scripts could see a token, and that site may block requests to GitHub.
+The button hands the data to the dashboard, which saves it to the private repo at once.
+
 Data lives in the browser (localStorage). **Export** saves it all as one file; importing that file
 on another device restores it. If `data/store.json` exists next to the page (an Export file), the
 page loads it when the browser has nothing saved, which is how a shared copy could be published.

@@ -66,5 +66,36 @@ const a2 = S.analyze(st.swimmers.X1);
 eq(a2.events.map(e => e.event), ['25 FR SCY', '50 FR SCY', '100 FR SCY'], '25 free joins the event list');
 eq(S.parseCapture({ tables: [{ rows: [['a', 'b']] }] }).notes[0], 'No table with Event and Time columns was found on that page.', 'unrecognized page note');
 
+// Snapshot replacement: a newer complete pull replaces the USA Swimming swims, keeps captures.
+const snap = S.empty();
+S.merge(snap, pull);                                   // pulledAt 2026-01-10, swims 10, 11, 20, 21
+S.mergeCapture(snap, 'X1', cap);                       // + one captured swim
+const corrected = JSON.parse(JSON.stringify(pull));
+corrected.pulledAt = '2026-02-01T00:00:00Z';
+corrected.meetTimes[2] = [{ swimTimeId: 20, eventCode: '50 FR SCY', swimTime: '40.10', timeDrop: -2.4 }];   // 21 gone, 20 corrected
+const rr = S.merge(snap, corrected);
+const ids = Object.keys(snap.swimmers.X1.swims).sort();
+eq([rr.added, rr.removed], [0, 1], 'newer pull: nothing new, one swim removed');
+eq(ids.filter(k => !k.startsWith('cap-')), ['10', '11', '20'], 'snapshot replaced');
+eq(ids.filter(k => k.startsWith('cap-')).length, 1, 'captured swim kept');
+eq(snap.swimmers.X1.swims['20'].time, '40.10', 'corrected time replaces the old one');
+eq(S.merge(snap, pull).older, true, 'older pull ignored');
+eq(Object.keys(snap.swimmers.X1.swims).length, 4, 'older pull changed nothing');
+const partial = JSON.parse(JSON.stringify(corrected));
+partial.pulledAt = '2026-03-01T00:00:00Z'; partial.meetTimes[1] = null; partial.errors = ['meet 1 of 2: 500'];
+eq(S.merge(snap, partial).removed, 0, 'partial pull removes nothing');
+eq(Object.keys(snap.swimmers.X1.swims).length, 4, 'partial pull keeps meet 1 swims');
+eq(snap.swimmers.X1.snapshotAt, '2026-02-01T00:00:00Z', 'partial pull does not move the snapshot');
+
+// Sync between devices: the newer snapshot wins in both directions; captures are unioned.
+const oldDev = S.empty(); S.merge(oldDev, pull);
+const newDev = JSON.parse(JSON.stringify(snap));
+const m1 = JSON.parse(JSON.stringify(oldDev)); S.mergeStores(m1, newDev);
+const m2 = JSON.parse(JSON.stringify(newDev)); S.mergeStores(m2, oldDev);
+eq(Object.keys(m1.swimmers.X1.swims).sort(), Object.keys(m2.swimmers.X1.swims).sort(), 'merge order does not matter');
+eq(!!m1.swimmers.X1.swims['21'], false, 'removed swim does not come back from an older device');
+eq(m1.swimmers.X1.swims['20'].time, '40.10', 'older device takes the corrected time');
+eq(S.mergeStores(JSON.parse(JSON.stringify(m2)), oldDev).changed, false, 'older device brings nothing new');
+
 if (fail.length) { console.error('FAIL\n' + fail.join('\n')); process.exit(1); }
 console.log('ok: store merge, analyze and capture parsing');

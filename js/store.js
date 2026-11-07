@@ -48,14 +48,29 @@
   }
 
   // Merge one pull into the store (mutates and returns a summary of what changed).
+  // Captured (SwimTopia etc.) swims and meets are kept apart from the USA Swimming snapshot.
+  const isCap = key => String(key).startsWith('cap-');
+
+  // A complete pull is a snapshot: it replaces the swimmer's USA Swimming swims and meets with
+  // exactly what the Data Hub showed (captured swims are kept). A pull with errors is partial,
+  // so it only adds. A pull older than the stored snapshot is ignored.
   function merge(store, pull) {
     const err = checkPull(pull);
     if (err) throw new Error(err);
     const id = pull.memberId;
     const sw = store.swimmers[id] || (store.swimmers[id] = { memberId: id, member: {}, meets: {}, swims: {}, pulls: [] });
+    const pulledAt = pull.pulledAt || new Date().toISOString();
+    if (sw.snapshotAt && pulledAt < sw.snapshotAt)
+      return { memberId: id, added: 0, removed: 0, older: true, firstImport: false, newBests: [] };
+    const partial = (pull.errors || []).length > 0 || Object.values(pull.meetTimes).some(v => !Array.isArray(v));
+    const usasBefore = Object.keys(sw.swims).filter(k => !isCap(k));
     if (pull.member) sw.member = Object.assign({}, sw.member, pull.member);
     if (pull.timeStandards) sw.timeStandards = pull.timeStandards;   // raw, kept for the cuts view
 
+    if (!partial) {
+      for (const k of Object.keys(sw.swims)) if (!isCap(k)) delete sw.swims[k];
+      for (const k of Object.keys(sw.meets)) if (!isCap(k)) delete sw.meets[k];
+    }
     for (const m of Array.isArray(pull.meets) ? pull.meets : []) {
       if (m && m.meetId != null) sw.meets[m.meetId] = {
         meetId: m.meetId, name: String(m.meetName || '').trim(), type: m.meetType || '',
@@ -66,7 +81,7 @@
     const bestDate = {};
     for (const b of Array.isArray(pull.bestTimes) ? pull.bestTimes : []) bestDate[b.eventCode + '|' + b.swimTime] = day(b.swimDate);
 
-    const before = new Set(Object.keys(sw.swims));
+    const before = new Set(usasBefore);
     const added = [];
     for (const [meetId, rows] of Object.entries(pull.meetTimes)) {
       if (!Array.isArray(rows)) continue;
@@ -85,11 +100,13 @@
         sw.swims[swim.id] = swim;
       }
     }
-    sw.pulls.push({ pulledAt: pull.pulledAt || new Date().toISOString(), swims: Object.values(pull.meetTimes).flat().length, errors: (pull.errors || []).length });
+    sw.pulls.push({ pulledAt, swims: Object.values(pull.meetTimes).flat().length, errors: (pull.errors || []).length });
+    if (!partial) sw.snapshotAt = pulledAt;
+    const removed = partial ? 0 : usasBefore.filter(k => !sw.swims[k]).length;
     sw.pulls.sort((a, b) => (a.pulledAt < b.pulledAt ? -1 : 1));
     // Only real improvements on swims new to this browser; a first import reports a count instead.
     const pbs = before.size ? analyze(sw).swims.filter(s => s.pb && !s.first && added.includes(s.id)) : [];
-    return { memberId: id, added: added.length, firstImport: !before.size,
+    return { memberId: id, added: added.length, removed, partial, firstImport: !before.size,
       newBests: pbs.map(s => eventName(s.event) + ' ' + s.time + ' (' + (s.change < 0 ? '−' + Math.abs(s.change).toFixed(2) : '') + ')') };
   }
 
@@ -201,10 +218,17 @@
     for (const [id, sw] of Object.entries(from.swimmers)) {
       let cur = into.swimmers[id];
       if (!cur) { into.swimmers[id] = JSON.parse(JSON.stringify(sw)); changed = true; continue; }
+      // USA Swimming part: the newer snapshot replaces the older one; equal (or none) = union.
+      const a = cur.snapshotAt || '', b = sw.snapshotAt || '';
       for (const k of ['meets', 'swims']) {
         cur[k] = cur[k] || {};
-        for (const [key, v] of Object.entries(sw[k] || {})) if (!cur[k][key]) { cur[k][key] = v; changed = true; }
+        if (b > a) for (const key of Object.keys(cur[k])) if (!isCap(key) && !(sw[k] || {})[key]) { delete cur[k][key]; changed = true; }
+        for (const [key, v] of Object.entries(sw[k] || {})) {
+          if (!isCap(key) && a > b) continue;                       // older snapshot: ignore its USA Swimming data
+          if (!cur[k][key] || (b > a && JSON.stringify(cur[k][key]) !== JSON.stringify(v))) { cur[k][key] = v; changed = true; }
+        }
       }
+      if (b > a) { cur.snapshotAt = b; changed = true; }
       cur.pulls = cur.pulls || [];
       const seen = new Set(cur.pulls.map(p => p.pulledAt + '|' + (p.source || '')));
       for (const p of sw.pulls || []) if (!seen.has(p.pulledAt + '|' + (p.source || ''))) { cur.pulls.push(p); changed = true; }

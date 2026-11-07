@@ -339,7 +339,10 @@
         }
         const r = S.merge(state.store, data);
         state.memberId = r.memberId;
+        if (r.older) { lines.push('That pull is older than the times already stored, so nothing changed.'); continue; }
         lines.push((data.member && data.member.shortName || r.memberId) + ': ' + r.added + ' new swim' + (r.added === 1 ? '' : 's') +
+          (r.removed ? ', ' + r.removed + ' no longer on USA Swimming removed' : '') +
+          (r.partial ? ' (the pull had problems, so nothing was removed)' : '') +
           (r.newBests.length ? '\nNew best times: ' + r.newBests.join(', ') : r.firstImport ? '' : '\nNo new best times this time.') +
           (data.errors && data.errors.length ? '\nThe pull reported ' + data.errors.length + ' problem(s): ' + data.errors.join('; ') : ''));
       } catch (e) { lines.push('Could not import: ' + e.message); }
