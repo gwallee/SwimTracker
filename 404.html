@@ -9,8 +9,18 @@
   // for that path; hand the token to the dashboard in the # part (which stays in the browser) and
   // replace this history entry so the token is not kept in the address bar or history.
   (function () {
-    var m = location.pathname.match(/^(.*?)\/token\/([A-Za-z0-9_]{20,255})\/?$/);
-    if (m) location.replace(m[1] + '/#token=' + m[2]);
+    var m = location.pathname.match(/^(.*?)\/token\/(.*)$/);
+    if (!m) return;
+    var raw = m[2];
+    try { raw = decodeURIComponent(raw); } catch (e) {}
+    // Forgive copy-paste extras: spaces/line breaks, <angle brackets>, quotes, trailing slash or punctuation.
+    var token = raw.replace(/\s+/g, '').replace(/^[<"']+/, '').replace(/[\/>"'.,;:!)]+$/, '');
+    if (/^[A-Za-z0-9_]{20,255}$/.test(token)) { location.replace(m[1] + '/#token=' + token); return; }
+    window.__tokenProblem = token.length === 0 ? 'The link has nothing after /token/.'
+      : /^token$/i.test(token) ? 'The link still has the placeholder <token> in it: put the real token there.'
+      : 'The token in this link is ' + token.length + ' characters' + (/[^A-Za-z0-9_]/.test(token) ? ' and contains characters a GitHub token never has' : '') +
+        '. A fine-grained token starts with github_pat_ and is about 90 letters, digits and _ characters. Copy it again from GitHub, or make a new one.';
+    history.replaceState(null, '', m[1] + '/token/');   // keep the bad token out of history
   })();
 </script>
 <style>
@@ -21,8 +31,15 @@
 </head>
 <body>
 <main>
-  <h1>Page not found</h1>
+  <h1 id="title">Page not found</h1>
+  <p id="why"></p>
   <p><a href="/SwimTracker/">Open SwimTracker</a></p>
 </main>
+<script>
+  if (window.__tokenProblem) {
+    document.getElementById('title').textContent = 'This share link did not work';
+    document.getElementById('why').textContent = window.__tokenProblem;
+  }
+</script>
 </body>
 </html>

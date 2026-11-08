@@ -528,8 +528,15 @@
 
   // Share link: <site>/#token=<token> (or /token/<token>/ via 404.html) sets up sync on this device.
   function tokenFromLink() {
-    const m = location.hash.match(/^#token=([A-Za-z0-9_]{20,255})$/);
-    if (!m) return;
+    const h0 = location.hash.match(/^#token=(.*)$/);
+    if (!h0) return;
+    let raw = h0[1]; try { raw = decodeURIComponent(raw); } catch {}
+    const m = [null, raw.replace(/\s+/g, '').replace(/^[<"']+/, '').replace(/[\/>"'.,;:!)]+$/, '')];
+    if (!/^[A-Za-z0-9_]{20,255}$/.test(m[1])) {
+      history.replaceState(null, '', location.pathname + location.search);
+      syncStatus('The share link\'s token does not look right (' + m[1].length + ' characters). Copy it again from GitHub.', true);
+      return;
+    }
     history.replaceState(null, '', location.pathname + location.search);
     const c = Y.getConfig();
     if (c.token !== m[1]) { c.token = m[1]; delete c.canWrite; Y.setConfig(c); }

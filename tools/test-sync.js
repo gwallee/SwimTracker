@@ -125,6 +125,18 @@ const remoteSwims = () => repo.file ? Object.keys(JSON.parse(repo.file).swimmers
   check(await swimsTile(cousin) === '3', 'share link device sees the times');
   check(await cousin.evaluate(t => JSON.parse(localStorage.getItem('swimtracker.sync')).token === t, shareToken), 'token saved in this browser');
   check(await cousin.evaluate(() => history.length) <= 2, 'token page not kept in history');
+  // Copy-paste extras are forgiven; a broken token gets an explanation, not "Page not found".
+  const sloppy = await cousinCtx.newPage();
+  await sloppy.goto(APP + 'token/%3C' + shareToken + '%3E%20/');
+  await sloppy.waitForURL(APP, { timeout: 10000 });
+  check(sloppy.url() === APP, 'token with <> and a space still works: ' + sloppy.url());
+  const broken = await cousinCtx.newPage();
+  await broken.goto(APP + 'token/github_pat_12-34/');
+  check(/did not work/.test(await broken.textContent('h1')) && /characters/.test(await broken.textContent('#why')), 'broken token explained');
+  check(!/github_pat_12/.test(broken.url()), 'broken token removed from the address bar');
+  const placeholder = await cousinCtx.newPage();
+  await placeholder.goto(APP + 'token/%3Ctoken%3E/');
+  check(/placeholder/.test(await placeholder.textContent('#why')), 'placeholder explained');
   const cousin2 = await cousinCtx.newPage();
   await cousin2.goto(APP + '#token=' + shareToken);
   await cousin2.waitForFunction(() => /Synced|View only/.test(document.getElementById('syncStatus')?.textContent || ''), null, { timeout: 10000 });
