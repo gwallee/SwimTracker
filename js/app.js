@@ -9,19 +9,20 @@
     event: null,
     stroke: null,
     cmpA: null, cmpB: null,  // compare view selections
+    evA: null, evB: null,    // "Compare events" tab
   };
 
   // ---------- storage (browser only; the page still works without it) ----------
   function load() {
     try { const raw = localStorage.getItem(KEY); if (raw) state.store = JSON.parse(raw); } catch {}
-    try { const ui = JSON.parse(localStorage.getItem(KEY + '.ui') || '{}'); Object.assign(state, pick(ui, ['memberId', 'view', 'event', 'stroke', 'cmpA', 'cmpB'])); } catch {}
+    try { const ui = JSON.parse(localStorage.getItem(KEY + '.ui') || '{}'); Object.assign(state, pick(ui, ['memberId', 'view', 'event', 'stroke', 'cmpA', 'cmpB', 'evA', 'evB'])); } catch {}
   }
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state.store)); } catch {}
     saveUi();
   }
   function saveUi() {
-    try { localStorage.setItem(KEY + '.ui', JSON.stringify(pick(state, ['memberId', 'view', 'event', 'stroke', 'cmpA', 'cmpB']))); } catch {}
+    try { localStorage.setItem(KEY + '.ui', JSON.stringify(pick(state, ['memberId', 'view', 'event', 'stroke', 'cmpA', 'cmpB', 'evA', 'evB']))); } catch {}
   }
   const pick = (o, ks) => Object.fromEntries(ks.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
 
@@ -127,10 +128,13 @@
 
     const tabs = h('div', { class: 'chips seg', role: 'tablist' },
       h('button', { class: 'chip' + (state.view === 'event' ? ' on' : ''), role: 'tab', onclick: () => { state.view = 'event'; saveUi(); render(); } }, 'By event'),
-      h('button', { class: 'chip' + (state.view === 'stroke' ? ' on' : ''), role: 'tab', onclick: () => { state.view = 'stroke'; saveUi(); render(); } }, 'By stroke (all distances)'));
+      h('button', { class: 'chip' + (state.view === 'stroke' ? ' on' : ''), role: 'tab', onclick: () => { state.view = 'stroke'; saveUi(); render(); } }, 'By stroke (all distances)'),
+      h('button', { class: 'chip' + (state.view === 'events' ? ' on' : ''), role: 'tab', onclick: () => { state.view = 'events'; saveUi(); render(); } }, 'Compare events'));
     card.append(h('div', { class: 'cardhead' }, h('h2', null, 'Times over time'), tabs));
 
-    if (state.view === 'stroke') {
+    if (state.view === 'events') {
+      compareEvents(a, card);
+    } else if (state.view === 'stroke') {
       card.append(h('div', { class: 'chips' }, strokes.map(st => h('button', {
         class: 'chip' + (st === state.stroke ? ' on' : ''), onclick: () => { state.stroke = st; saveUi(); render(); }
       }, S.STROKES[st] || st))));
@@ -269,6 +273,57 @@
         h('td', { class: 'num' }, timeText(x), pbBadge(x)),
         h('td', { class: 'num' }, fmtChange(x.change)),
         h('td', { class: 'num wide' }, x.place ?? '')))))));
+  }
+
+  // ---------- compare two events over time ----------
+  function compareEvents(a, card) {
+    const byCount = a.events.slice().sort((x, y) => y.count - x.count);
+    const has = ev => a.events.some(e => e.event === ev);
+    if (!has(state.evA)) state.evA = (byCount[0] || {}).event;
+    if (!has(state.evB) || state.evB === state.evA) state.evB = (byCount.find(e => e.event !== state.evA) || {}).event;
+    const pick = which => h('select', { 'aria-label': which === 'evA' ? 'First event' : 'Second event',
+      onchange: ev => { state[which] = ev.target.value; saveUi(); render(); } },
+      a.events.map(e => { const o = h('option', { value: e.event }, e.name + ' (' + e.count + ')'); if (e.event === state[which]) o.selected = true; return o; }));
+    card.append(h('div', { class: 'cmp' }, pick('evA'), h('span', { class: 'muted' }, 'vs'), pick('evB')));
+    const evs = [state.evA, state.evB].map(ev => a.events.find(e => e.event === ev)).filter(Boolean);
+    if (evs.length < 2) { card.append(h('p', { class: 'muted' }, 'Swim at least two different events to compare them.')); return; }
+    if (evs[0].event === evs[1].event) { card.append(h('p', { class: 'muted' }, 'Pick two different events.')); return; }
+
+    // Same distance: real times on one axis. Different distances: pace per 25 so both share one scale.
+    const sameDist = evs[0].best.distance === evs[1].best.distance;
+    const val = x => sameDist ? x.secs : x.secs / (x.distance / 25);
+    card.append(h('p', { class: 'muted small' }, sameDist
+      ? 'Both are ' + evs[0].best.distance + 's, so the chart shows the actual times. Higher = faster.'
+      : 'Different distances, so the chart shows pace per 25 (time ÷ number of 25s). Higher = faster.'));
+    card.append(chart(evs.map((e, i) => ({ label: e.name, color: SERIES[i], shape: SHAPES[i], points: e.swims.map(x => ({ x: x.date, y: val(x), swim: x })) })), {
+      yFmt: v => sameDist ? S.fmtSecs(v) : v.toFixed(1) + ' s',
+      tipFmt: p => timeText(p.swim) + ' (' + S.eventName(p.swim.event) + ')' + (sameDist ? '' : ' · ' + p.y.toFixed(2) + ' s per 25'),
+    }));
+    // Side by side: first swim, best, last, improvement (seconds and %, so any two events compare).
+    const stat = e => {
+      const first = e.swims[0], best = e.best, last = e.swims[e.swims.length - 1];
+      const gain = first.secs - best.secs;
+      return { first, best, last, gain, pct: first.secs ? gain / first.secs * 100 : 0, count: e.count };
+    };
+    const [p, q] = evs.map(stat);
+    const row = (label, f) => h('tr', null, h('td', null, label), h('td', { class: 'num' }, f(p)), h('td', { class: 'num' }, f(q)));
+    const when = sw => h('div', { class: 'muted small' }, fmtDate(sw.date, { month: 'numeric', day: 'numeric', year: '2-digit' }));
+    const more = (x, y) => x.count < 2 ? '' : x.pct > y.pct + 0.05 ? ' ◀' : '';
+    card.append(h('div', { class: 'scroll' }, h('table', { class: 'small cmpev' },
+      h('thead', null, h('tr', null, h('th', null, ''), h('th', { class: 'num' }, evs[0].name), h('th', { class: 'num' }, evs[1].name))),
+      h('tbody', null,
+        row('Swims', s => String(s.count)),
+        row('First', s => [timeText(s.first), when(s.first)]),
+        row('Best', s => [h('b', null, timeText(s.best)), when(s.best)]),
+        row('Last', s => [timeText(s.last), when(s.last)]),
+        !sameDist ? row('Best pace per 25', s => (s.best.secs / (s.best.distance / 25)).toFixed(2) + ' s') : null,
+        row('Improvement', s => s.count < 2 ? 'one swim' : '−' + s.gain.toFixed(2) + ' s'),
+        row('Improvement %', s => s.count < 2 ? '–' : s.pct.toFixed(1) + '%' + more(s, s === p ? q : p))))));
+    if (p.count > 1 && q.count > 1) {
+      const lead = p.pct > q.pct ? [evs[0], p, q] : [evs[1], q, p];
+      card.append(h('p', { class: 'muted small' }, Math.abs(p.pct - q.pct) < 0.05 ? 'Both improved by about the same share since the first swim.'
+        : lead[0].name + ' has improved more since the first swim: ' + lead[1].pct.toFixed(1) + '% vs ' + lead[2].pct.toFixed(1) + '%.'));
+    }
   }
 
   // ---------- compare: two points in time (or two meets) side by side ----------

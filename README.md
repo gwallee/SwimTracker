@@ -56,6 +56,11 @@ each device and kept only in that browser (`js/sync.js`).
 
 ## Compare
 
+**Times over time → Compare events** charts two events against each other (actual times when the
+distances match, pace per 25 when they differ) with a side-by-side table: swims, first, best, last,
+best pace, and improvement in seconds and percent since the first swim.
+
+
 The **Compare** card puts two selections side by side per event, with the change and "faster in N of M":
 best times now, best times as of any meet date, or the swims at one meet.
 
