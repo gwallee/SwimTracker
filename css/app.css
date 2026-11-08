@@ -107,3 +107,7 @@ details.meet h3 { display: inline; }
 .dlg input:not([type=file]) { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
 #syncStatus.err { color: #c23b3b; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #syncStatus.err { color: #f08080; } }
+
+.cmp { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 10px; }
+.cmp select { flex: 1 1 200px; min-width: 0; font: inherit; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+td.gain { font-weight: 600; }

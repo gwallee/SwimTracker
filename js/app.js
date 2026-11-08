@@ -8,19 +8,20 @@
     view: 'event',        // 'event' = one event over time, 'stroke' = pace per 25 across distances
     event: null,
     stroke: null,
+    cmpA: null, cmpB: null,  // compare view selections
   };
 
   // ---------- storage (browser only; the page still works without it) ----------
   function load() {
     try { const raw = localStorage.getItem(KEY); if (raw) state.store = JSON.parse(raw); } catch {}
-    try { const ui = JSON.parse(localStorage.getItem(KEY + '.ui') || '{}'); Object.assign(state, pick(ui, ['memberId', 'view', 'event', 'stroke'])); } catch {}
+    try { const ui = JSON.parse(localStorage.getItem(KEY + '.ui') || '{}'); Object.assign(state, pick(ui, ['memberId', 'view', 'event', 'stroke', 'cmpA', 'cmpB'])); } catch {}
   }
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state.store)); } catch {}
     saveUi();
   }
   function saveUi() {
-    try { localStorage.setItem(KEY + '.ui', JSON.stringify(pick(state, ['memberId', 'view', 'event', 'stroke']))); } catch {}
+    try { localStorage.setItem(KEY + '.ui', JSON.stringify(pick(state, ['memberId', 'view', 'event', 'stroke', 'cmpA', 'cmpB']))); } catch {}
   }
   const pick = (o, ks) => Object.fromEntries(ks.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
 
@@ -96,6 +97,7 @@
 
     main.append(tiles(a));
     main.append(chartCard(a));
+    main.append(compareCard(a));
     main.append(bestTable(a));
     main.append(meetList(a));
   }
@@ -267,6 +269,73 @@
         h('td', { class: 'num' }, timeText(x), pbBadge(x)),
         h('td', { class: 'num' }, fmtChange(x.change)),
         h('td', { class: 'num wide' }, x.place ?? '')))))));
+  }
+
+  // ---------- compare: two points in time (or two meets) side by side ----------
+  function compareOptions(a) {
+    const opts = [{ key: 'best', label: 'Best times now', group: '' }];
+    const meets = a.meets.slice().reverse();                // oldest first
+    const seen = new Set();
+    for (const m of meets) if (!seen.has(m.start)) {
+      seen.add(m.start);
+      opts.push({ key: 'asof:' + m.start, label: 'Bests after ' + fmtDate(m.start, { month: 'short', day: 'numeric', year: 'numeric' }), group: 'Best times as of' });
+    }
+    for (const m of a.meets) opts.push({ key: 'meet:' + m.meetId, label: fmtDate(m.start, { month: 'short', year: '2-digit' }) + ' · ' + m.name, group: 'Swims at one meet' });
+    return opts;
+  }
+  // event code -> the swim that represents it for this choice
+  function compareSet(a, key) {
+    const out = {};
+    const take = x => { if (x.secs != null && (!out[x.event] || x.secs < out[x.event].secs)) out[x.event] = x; };
+    if (key === 'best') a.swims.forEach(take);
+    else if (key.startsWith('asof:')) a.swims.filter(x => x.date <= key.slice(5)).forEach(take);
+    else if (key.startsWith('meet:')) a.swims.filter(x => x.meetId === key.slice(5)).forEach(take);
+    return out;
+  }
+  function compareCard(a) {
+    const opts = compareOptions(a);
+    const keys = new Set(opts.map(o => o.key));
+    if (!keys.has(state.cmpB)) state.cmpB = 'best';
+    if (!keys.has(state.cmpA)) {            // default: bests about six months before the latest swim
+      const last = a.swims.length ? a.swims[a.swims.length - 1].date : '';
+      const cut = last ? new Date(Date.parse(last + 'T12:00:00') - 182 * 864e5).toISOString().slice(0, 10) : '';
+      const asof = opts.filter(o => o.key.startsWith('asof:'));
+      state.cmpA = (asof.filter(o => o.key.slice(5) <= cut).pop() || asof[0] || opts[0]).key;
+    }
+    const select = (which) => {
+      const sel = h('select', { 'aria-label': which === 'cmpA' ? 'Compare from' : 'Compare to', onchange: e => { state[which] = e.target.value; saveUi(); render(); } });
+      let group = null;
+      for (const o of opts) {
+        if (o.group && (!group || group.label !== o.group)) { group = h('optgroup', { label: o.group }); sel.append(group); }
+        const opt = h('option', { value: o.key }, o.label);
+        if (o.key === state[which]) opt.selected = true;
+        (o.group ? group : sel).append(opt);
+      }
+      return sel;
+    };
+    const A = compareSet(a, state.cmpA), B = compareSet(a, state.cmpB);
+    const events = [...new Set([...Object.keys(A), ...Object.keys(B)])].sort(S.compareEvents);
+    let faster = 0, both = 0;
+    const rows = events.map(ev => {
+      const x = A[ev], y = B[ev];
+      let change = '', cls = '';
+      if (x && y) {
+        both++;
+        const d = +(y.secs - x.secs).toFixed(2);
+        if (d < 0) { faster++; change = fmtChange(d) + ' faster'; cls = 'gain'; }
+        else if (d > 0) change = fmtChange(d) + ' slower';
+        else change = 'same';
+      } else change = y ? 'new' : '–';
+      const cell = sw => sw ? [timeText(sw), h('div', { class: 'muted small' }, fmtDate(sw.date, { month: 'numeric', day: 'numeric', year: '2-digit' }))] : '–';
+      return h('tr', null, h('td', null, S.eventName(ev)), h('td', { class: 'num' }, cell(x)), h('td', { class: 'num' }, cell(y)), h('td', { class: 'num ' + cls }, change));
+    });
+    return h('section', { class: 'card' },
+      h('h2', null, 'Compare'),
+      h('div', { class: 'cmp' }, select('cmpA'), h('span', { class: 'muted' }, 'vs'), select('cmpB')),
+      both ? h('p', { class: 'muted small' }, 'Faster in ' + faster + ' of ' + both + ' event' + (both === 1 ? '' : 's') + ' swum in both.') : null,
+      h('div', { class: 'scroll' }, h('table', { class: 'small' },
+        h('thead', null, h('tr', null, h('th', null, 'Event'), h('th', { class: 'num' }, 'First'), h('th', { class: 'num' }, 'Second'), h('th', { class: 'num' }, 'Change'))),
+        h('tbody', null, rows))));
   }
 
   function bestTable(a) {
@@ -457,7 +526,18 @@
   document.getElementById('syOff').addEventListener('click', syncOff);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow('refresh'); });
 
+  // Share link: <site>/#token=<token> (or /token/<token>/ via 404.html) sets up sync on this device.
+  function tokenFromLink() {
+    const m = location.hash.match(/^#token=([A-Za-z0-9_]{20,255})$/);
+    if (!m) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    const c = Y.getConfig();
+    if (c.token !== m[1]) { c.token = m[1]; delete c.canWrite; Y.setConfig(c); }
+    syncStatus('Sync set up from the link…');
+  }
+
   load();
   render();
+  tokenFromLink();
   receiveFromLink().then(() => syncNow('open')).then(loadPublished);
 })();

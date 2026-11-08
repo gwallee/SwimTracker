@@ -25,11 +25,14 @@ async function route(r) {
   const u = new URL(req.url());
   if (u.href.startsWith(APP)) {
     const f = path.join(__dirname, '..', decodeURIComponent(u.pathname.slice('/SwimTracker/'.length)) || 'index.html');
-    if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
+    // Like GitHub Pages: unknown paths get 404.html with status 404.
+    if (!fs.existsSync(f) || fs.statSync(f).isDirectory())
+      return r.fulfill({ status: 404, contentType: 'text/html', body: fs.readFileSync(path.join(__dirname, '..', '404.html')) });
     return r.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
   }
   if (u.hostname !== 'api.github.com') return r.abort();
-  const token = (req.headers().authorization || '').replace('Bearer ', '');
+  let token = (req.headers().authorization || '').replace('Bearer ', '');
+  if (/^github_pat_ro_/.test(token)) token = 'ro';     // share-link tokens look like real ones
   const json = (status, body) => r.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body),
     headers: { 'access-control-allow-origin': '*' } });
   if (!['rw', 'ro', 'nocontents'].includes(token)) return json(401, { message: 'Bad credentials' });
@@ -111,6 +114,22 @@ const remoteSwims = () => repo.file ? Object.keys(JSON.parse(repo.file).swimmers
   await grandma.reload();
   await grandma.waitForFunction(() => /Synced|View only/.test(document.getElementById('syncStatus').textContent), null, { timeout: 10000 });
   check(repo.puts === putsBefore, 'view-only device never writes');
+
+  // Share link with a view token: /token/<token>/ sets up sync and leaves no token in the address bar.
+  const cousinCtx = await browser.newContext(); await cousinCtx.route('**/*', route);
+  const cousin = await cousinCtx.newPage();
+  const shareToken = 'github_pat_ro_' + 'A1b2C3d4E5f6G7h8I9j0';
+  await cousin.goto(APP + 'token/' + shareToken + '/');
+  await cousin.waitForFunction(() => /Synced|View only/.test(document.getElementById('syncStatus')?.textContent || ''), null, { timeout: 10000 });
+  check(cousin.url() === APP, 'share link lands on the dashboard without the token: ' + cousin.url());
+  check(await swimsTile(cousin) === '3', 'share link device sees the times');
+  check(await cousin.evaluate(t => JSON.parse(localStorage.getItem('swimtracker.sync')).token === t, shareToken), 'token saved in this browser');
+  check(await cousin.evaluate(() => history.length) <= 2, 'token page not kept in history');
+  const cousin2 = await cousinCtx.newPage();
+  await cousin2.goto(APP + '#token=' + shareToken);
+  await cousin2.waitForFunction(() => /Synced|View only/.test(document.getElementById('syncStatus')?.textContent || ''), null, { timeout: 10000 });
+  check(cousin2.url() === APP, '#token= link also cleaned: ' + cousin2.url());
+  check(await cousin2.$eval('.card h2 + .cmp', () => true).catch(() => false), 'compare card shown');
 
   // A device with its own times and a view-only token: the refused save marks it view only.
   const auntStore = S.empty(); S.merge(auntStore, pullFor([{ date: '2025-12-01', time: '37.90' }]));

@@ -54,6 +54,18 @@ each device and kept only in that browser (`js/sync.js`).
 - Read-only token (Contents: Read-only): view only, for family. It never writes.
 - Tokens expire (at most a year); make a new one and enter it again under Sync.
 
+## Compare
+
+The **Compare** card puts two selections side by side per event, with the change and "faster in N of M":
+best times now, best times as of any meet date, or the swims at one meet.
+
+## Share links
+
+`https://gwallee.github.io/SwimTracker/#token=<token>` (or `/token/<token>/`, handled by `404.html`)
+saves the token on that device and opens the dashboard, removing the token from the address bar
+and history. Use a **read-only** token for family. The `#` form never reaches a server; the `/token/`
+form is sent to GitHub Pages as part of the page request.
+
 ## Develop
 
 Zero dependencies: plain HTML/CSS/JS (`index.html`, `css/app.css`, `js/store.js`, `js/sync.js`, `js/app.js`).

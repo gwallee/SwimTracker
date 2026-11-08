@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SwimTracker</title>
+<script>
+  // Share links: <site>/token/<token>/ sets up sync on this device. GitHub Pages serves this page
+  // for that path; hand the token to the dashboard in the # part (which stays in the browser) and
+  // replace this history entry so the token is not kept in the address bar or history.
+  (function () {
+    var m = location.pathname.match(/^(.*?)\/token\/([A-Za-z0-9_]{20,255})\/?$/);
+    if (m) location.replace(m[1] + '/#token=' + m[2]);
+  })();
+</script>
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui, -apple-system, sans-serif; background: #f4f5f3; color: #0b0b0b; }
+  @media (prefers-color-scheme: dark) { body { background: #111110; color: #f0efec; } a { color: #8ab8f0; } }
+  main { max-width: 480px; margin: 0 auto; padding: 48px 16px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Page not found</h1>
+  <p><a href="/SwimTracker/">Open SwimTracker</a></p>
+</main>
+</body>
+</html>
