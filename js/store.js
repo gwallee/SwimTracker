@@ -159,6 +159,7 @@
     const d = Date.parse(t.replace(/(\d)(st|nd|rd|th)\b/, '$1'));
     return isNaN(d) ? '' : new Date(d).toISOString().slice(0, 10);
   }
+  const siteLabel = site => /swimtopia/i.test(site || '') ? 'Summer league (SwimTopia)' : site || 'Captured';
   function hashId(s) { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return (h >>> 0).toString(36); }
 
   // Reads a capture into { meets, swims, skipped, notes } for one swimmer. Tables are recognized by
@@ -182,17 +183,20 @@
       for (const r of t.rows.slice(hi + 1)) {
         if (cName >= 0 && lastName && !String(r[cName] || '').toLowerCase().includes(lastName)) continue;
         const event = eventFromText(r[cEvent], course);
-        const time = String(r[cTime] || '').replace(/[A-Za-z*]+$/, '').trim();
+        const rawTime = String(r[cTime] || '');
+        const converted = /\*/.test(rawTime);       // SwimTopia: * = converted to the displayed course
+        const time = rawTime.replace(/[A-Za-z*]+$/, '').trim();
         const secs = toSecs(time);
         if (!event || secs == null) { if (r.some(Boolean)) res.skipped++; continue; }
         const date = (cDate >= 0 && dateFromText(r[cDate])) || dateFromText(meetFromHeading) || pageDate;
         if (!date) { res.skipped++; continue; }
         const meetName = (cMeet >= 0 && r[cMeet]) || meetFromHeading || cap.site;
         const meetId = 'cap-' + hashId(meetName + '|' + date);
-        if (!res.meets[meetId]) res.meets[meetId] = { meetId, name: meetName, type: cap.site || 'Captured', season: '', start: date, end: date, course: event.split(' ')[2] };
+        if (!res.meets[meetId]) res.meets[meetId] = { meetId, name: meetName, type: siteLabel(cap.site), season: '', start: date, end: date, course: event.split(' ')[2] };
         const place = cPlace >= 0 ? parseInt(r[cPlace], 10) : NaN;
         res.swims.push({ id: 'cap-' + hashId(date + '|' + event + '|' + time), meetId, event, ...parseEvent(event), time: fmtSecs(secs), secs,
-          standard: '', drop: null, place: isNaN(place) ? null : place, session: '', date, source: cap.site || 'capture' });
+          standard: '', drop: null, place: isNaN(place) ? null : place, session: '', date, source: cap.site || 'capture',
+          converted: converted || undefined });
       }
     }
     if (!res.tables) res.notes.push('No table with Event and Time columns was found on that page.');

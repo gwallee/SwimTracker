@@ -97,5 +97,16 @@ eq(!!m1.swimmers.X1.swims['21'], false, 'removed swim does not come back from an
 eq(m1.swimmers.X1.swims['20'].time, '40.10', 'older device takes the corrected time');
 eq(S.mergeStores(JSON.parse(JSON.stringify(m2)), oldDev).changed, false, 'older device brings nothing new');
 
+// SwimTopia athlete best-times layout (Event | Time | Date | Meet; * = converted to yards). Values are made up.
+const topia = S.parseCapture({ site: 'team.swimtopia.com', headings: ['Display Options'], tables: [{ heading: '', rows: [
+  ['Event', 'Time', 'Date', 'Meet'],
+  ['25 Freestyle', '20.10', '05/23/26', 'Home vs Away'],
+  ['25 Backstroke', '24.00*', '06/27/26', 'Div 2 Championship (RR,SR,BHC)'],
+  ['100 Individual Medley', '2:20.00', '05/30/26', 'Away at Pool'],
+] }] }, {});
+eq(topia.swims.map(x => [x.event, x.time, x.date, !!x.converted]),
+  [['25 FR SCY', '20.10', '2026-05-23', false], ['25 BK SCY', '24.00', '2026-06-27', true], ['100 IM SCY', '2:20.00', '2026-05-30', false]], 'SwimTopia best-times table');
+eq(Object.values(topia.meets)[0].type, 'Summer league (SwimTopia)', 'SwimTopia meets labelled');
+
 if (fail.length) { console.error('FAIL\n' + fail.join('\n')); process.exit(1); }
 console.log('ok: store merge, analyze and capture parsing');

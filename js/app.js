@@ -55,6 +55,7 @@
 
   const fmtDate = (d, opts) => d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, opts || { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   const fmtChange = c => c == null ? '' : (c < 0 ? '−' + Math.abs(c).toFixed(2) : '+' + c.toFixed(2));
+  const timeText = sw => sw.time + (sw.converted ? '*' : '');
   const pbBadge = sw => sw.pb ? h('span', { class: 'pb', title: sw.first ? 'First time swimming this event' : 'Personal best' }, sw.first ? 'NEW' : 'PB') : null;
 
   // ---------- render ----------
@@ -141,7 +142,7 @@
         'Pace per 25 (time ÷ number of 25s), so 25s, 50s and 100s of ' + (S.STROKES[state.stroke] || state.stroke) +
         ' share one chart. Longer races are naturally a little slower per 25, so compare each distance\'s own trend. Higher on the chart = faster. ' + n + ' swims.'));
       if (evs.length > 3) card.append(h('p', { class: 'muted small' }, 'Showing the three shortest distances.'));
-      card.append(chart(series.slice(0, 3), { yLabel: 's per 25', yFmt: v => v.toFixed(1) + ' s', tipFmt: p => p.swim.time + ' (' + S.eventName(p.swim.event) + ') · ' + p.y.toFixed(2) + ' s per 25' }));
+      card.append(chart(series.slice(0, 3), { yLabel: 's per 25', yFmt: v => v.toFixed(1) + ' s', tipFmt: p => timeText(p.swim) + ' (' + S.eventName(p.swim.event) + ') · ' + p.y.toFixed(2) + ' s per 25' }));
       card.append(historyTable(evs.flatMap(e => e.swims).sort((x, y) => (x.date < y.date ? 1 : -1)), true));
     } else {
       card.append(h('div', { class: 'chips' }, a.events.map(e => h('button', {
@@ -149,10 +150,10 @@
       }, e.name.replace(/ (SCY|SCM|LCM)$/, '') + ' (' + e.count + ')'))));
       const e = a.events.find(x => x.event === state.event);
       if (!e) return card;
-      card.append(h('p', { class: 'muted small' }, e.name + ' · best ' + e.best.time + ' · ' + e.count + ' swim' + (e.count === 1 ? '' : 's') + '. Higher on the chart = faster.'));
+      card.append(h('p', { class: 'muted small' }, e.name + ' · best ' + timeText(e.best) + ' · ' + e.count + ' swim' + (e.count === 1 ? '' : 's') + '. Higher on the chart = faster.'));
       if (e.count < 2) card.append(h('p', { class: 'muted small' }, 'Only one swim so far. Try "By stroke" to see it next to the other ' + (S.STROKES[e.best.stroke] || '') + ' distances.'));
       card.append(chart([{ label: e.name, color: SERIES[0], shape: 'circle', points: e.swims.map(x => ({ x: x.date, y: x.secs, swim: x })) }],
-        { yFmt: v => S.fmtSecs(v), tipFmt: p => p.swim.time, single: true }));
+        { yFmt: v => S.fmtSecs(v), tipFmt: p => timeText(p.swim), single: true }));
       card.append(historyTable(e.swims.slice().reverse(), false));
     }
     return card;
@@ -263,7 +264,7 @@
         h('td', null, fmtDate(x.date, { month: 'short', day: 'numeric', year: '2-digit' })),
         showEvent ? h('td', null, S.eventName(x.event)) : null,
         h('td', { class: 'wide' }, (meets[x.meetId] || {}).name || ''),
-        h('td', { class: 'num' }, x.time, pbBadge(x)),
+        h('td', { class: 'num' }, timeText(x), pbBadge(x)),
         h('td', { class: 'num' }, fmtChange(x.change)),
         h('td', { class: 'num wide' }, x.place ?? '')))))));
   }
@@ -277,10 +278,11 @@
           onclick: () => { state.view = 'event'; state.event = e.event; saveUi(); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
         },
           h('td', null, e.name),
-          h('td', { class: 'num' }, h('b', null, e.best.time)),
+          h('td', { class: 'num' }, h('b', null, timeText(e.best))),
           h('td', null, fmtDate(e.best.date, { month: 'short', year: 'numeric' }), h('div', { class: 'muted small wide' }, e.bestMeet ? e.bestMeet.name : '')),
-          h('td', { class: 'num' }, e.last.time, h('div', { class: 'muted small' }, e.last.id === e.best.id ? 'best' : fmtChange(+(e.last.secs - e.best.secs).toFixed(2)) + ' off best')),
+          h('td', { class: 'num' }, timeText(e.last), h('div', { class: 'muted small' }, e.last.id === e.best.id ? 'best' : fmtChange(+(e.last.secs - e.best.secs).toFixed(2)) + ' off best')),
           h('td', { class: 'num wide' }, e.count)))))),
+      a.swims.some(x => x.converted) ? h('p', { class: 'muted small' }, '* Converted to yards by SwimTopia.') : null,
       h('p', { class: 'muted small' }, 'Tap an event to chart it. USA Swimming lists every time so far as "Slower Than B"; time standards are coming next.'));
   }
 
@@ -291,7 +293,7 @@
         h('div', { class: 'muted small' }, fmtDate(m.start) + (m.end && m.end !== m.start ? ' – ' + fmtDate(m.end) : '') + ' · ' + m.type + ' · ' + m.swims.filter(x => x.pb).length + ' of ' + m.swims.length + ' best times'),
         h('table', { class: 'small' }, h('tbody', null, m.swims.map(x => h('tr', null,
           h('td', null, S.eventName(x.event)),
-          h('td', { class: 'num' }, x.time, pbBadge(x)),
+          h('td', { class: 'num' }, timeText(x), pbBadge(x)),
           h('td', { class: 'num' }, fmtChange(x.change)),
           h('td', { class: 'num muted wide' }, x.place != null ? 'place ' + x.place : ''))))))));
   }
