@@ -59,6 +59,8 @@ let failMeet = true;
   // Capture on a results page adds its rows to the same swimmer.
   await page.goto('https://swim.example/results');
   await page.evaluate(capCode);
+  const capPanel = await page.textContent('body');
+  await page.click('button:has-text("Add to SwimTracker")');
   await page.waitForURL(u => u.href.startsWith(APP), { timeout: 10000 });
   await page.waitForFunction(() => /Capture from/.test(document.getElementById('importMsg')?.textContent || ''), null, { timeout: 10000 });
   const capMsg = await page.textContent('#importMsg');
@@ -81,6 +83,7 @@ let failMeet = true;
   check(/Test Swimmer: 2 new swims/.test(added), 'added from link: ' + added);
   check(hashGone, 'data removed from the address bar');
   check(/Swims\s+2/.test(swims), 'dashboard shows 2 swims: ' + swims);
+  check(/Found 1 result row/.test(capPanel), 'capture shows what it found first: ' + capPanel.slice(-200));
   check(/1 swim\(s\) read, 1 new/.test(capMsg), 'capture added: ' + capMsg);
   check(events.some(e => /^25 Free/.test(e)), 'captured 25 Free on the dashboard: ' + events);
   if (fail.length) { console.error('FAIL\n' + fail.join('\n')); process.exit(1); }

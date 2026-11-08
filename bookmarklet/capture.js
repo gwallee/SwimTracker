@@ -18,7 +18,7 @@
     kind: 'swimtracker-capture', version: 1, site: location.hostname, url: location.href,
     title: document.title, capturedAt: new Date().toISOString(),
     headings: [...document.querySelectorAll('h1,h2,h3')].map(e => clean(e.innerText)).filter(Boolean).slice(0, 40),
-    tables, text: tables.length ? '' : clean(main.innerText).slice(0, 60000)
+    tables, text: clean(main.innerText).slice(0, 60000)
   };
   // Packs JSON for the #add= link: deflate + base64url when the browser can, plain otherwise.
   const pack = async json => {
@@ -32,7 +32,11 @@
   };
   const APP = '__SWIMTRACKER_URL__';
   const addToApp = async data => { location.href = APP + '#add=' + await pack(JSON.stringify(data)); };
-  if (tables.length) { addToApp(out); return; }
+  // Tables SwimTracker can read have a header row with Event and Time columns.
+  const timeRows = tables.reduce((n, t) => {
+    const hi = t.rows.findIndex(r => r.some(c => /^event/i.test(c)) && r.some(c => /time/i.test(c)));
+    return hi < 0 ? n : n + t.rows.length - hi - 1;
+  }, 0);
   const json = JSON.stringify(out, null, 1);
   const host = location.hostname.replace(/^www\./, '').split('.')[0];
   const name = 'swimtracker-capture-' + host + '-' + out.capturedAt.slice(0, 10) + '.json';
@@ -44,9 +48,10 @@
   const title = document.createElement('b');
   title.textContent = 'SwimTracker capture';
   const msg = document.createElement('div');
-  msg.textContent = tables.length
-    ? 'Found ' + tables.length + ' table(s), ' + tables.reduce((n, t) => n + t.rows.length, 0) + ' rows. Save the file and import it into SwimTracker.'
-    : 'No tables on this page; saved the page text instead. If the times are not on screen, open the page that lists them and try again.';
+  msg.textContent = timeRows
+    ? 'Found ' + timeRows + ' result row(s) with Event and Time columns. Tap Add to SwimTracker.'
+    : 'Did not find a times table (Event and Time columns) on this page' + (tables.length ? ' (' + tables.length + ' other table(s))' : '') +
+      '. If the times are on another tab of this page, open it and tap the button again. Otherwise tap Save file and send the file to Claude so SwimTracker can learn this page.';
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
   const btn = (label, fn) => {
@@ -58,7 +63,7 @@
   const ta = document.createElement('textarea');
   ta.value = json; ta.readOnly = true;
   ta.style.cssText = 'flex:1;min-height:120px;font:11px ui-monospace,monospace';
-  btn('Add to SwimTracker anyway', () => addToApp(out));
+  btn(timeRows ? 'Add to SwimTracker' : 'Add anyway', () => addToApp(out));
   btn('Save file', () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
